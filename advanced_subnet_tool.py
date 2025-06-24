@@ -1,61 +1,82 @@
 import streamlit as st
 import ipaddress
+import math
 import pandas as pd
 
-st.set_page_config(page_title="Advanced Subnet Calculator", layout="centered")
-st.title("📡 Advanced Subnet Calculator")
+st.set_page_config(page_title="Subnet Calculator with Explanation", layout="centered")
+st.title("📡 Subnet Calculator with Full Explanation")
 
-# User Inputs
-base_network = st.text_input("Enter base network (e.g., 101.0.0.0/8)", "101.0.0.0/8")
-subnet_prefix = st.number_input("New Subnet Prefix (CIDR)", min_value=8, max_value=30, value=19)
-start_index = st.number_input("Start Subnet Index", min_value=1, value=1)
-count = st.number_input("How Many Subnets to List?", min_value=1, max_value=2000, value=5)
+# --------- INPUTS (Only 2) ---------
+base_network_input = st.text_input("1️⃣ Enter base network (e.g., 101.0.0.0/8)", "101.0.0.0/8")
+subnet_count = st.number_input("2️⃣ How many subnets to list?", min_value=1, max_value=2048, value=8)
 
-# 📘 Subnetting Calculations Section
-st.subheader("📘 Subnetting Calculations")
-
-try:
-    original_prefix = int(base_network.split("/")[1])
-    bits_borrowed = subnet_prefix - original_prefix
-    mask_ip = ipaddress.IPv4Network(f"0.0.0.0/{subnet_prefix}").netmask.exploded
-    total_hosts = 2 ** (32 - subnet_prefix)
-    usable_hosts = total_hosts - 2
-
-    octets = mask_ip.split(".")
-    if subnet_prefix > 24:
-        increment = 256 - int(octets[3])
-        octet_level = "4th"
-    elif subnet_prefix > 16:
-        increment = 256 - int(octets[2])
-        octet_level = "3rd"
-    elif subnet_prefix > 8:
-        increment = 256 - int(octets[1])
-        octet_level = "2nd"
-    else:
-        increment = 256 - int(octets[0])
-        octet_level = "1st"
-
-    st.markdown(f"**Original CIDR Prefix:** /{original_prefix}")
-    st.markdown(f"**New Subnet Prefix (CIDR):** /{subnet_prefix}")
-    st.markdown(f"**Bits Borrowed:** {bits_borrowed}")
-    st.markdown(f"**Subnet Mask:** {mask_ip}")
-    st.markdown(f"**Subnet Increment:** {increment} (in the {octet_level} octet)")
-    st.markdown(f"**Usable Hosts per Subnet:** {usable_hosts}")
-
-except Exception as e:
-    st.warning(f"Subnetting logic skipped: {e}")
-
-# Generate Subnets
-if st.button("Generate Subnet Table"):
+# --------- CALCULATIONS ---------
+if base_network_input and subnet_count:
     try:
-        base = ipaddress.ip_network(base_network, strict=False)
-        subnets = list(base.subnets(new_prefix=subnet_prefix))
+        network = ipaddress.ip_network(base_network_input, strict=False)
+        original_prefix = network.prefixlen
 
-        if start_index + count - 1 > len(subnets):
-            st.error(f"Only {len(subnets)} subnets available. Adjust the range.")
+        # 1. Determine how many bits to borrow
+        bits_borrowed = math.ceil(math.log2(subnet_count))
+        new_prefix = original_prefix + bits_borrowed
+
+        # 2. New Subnet Mask
+        subnet_mask = ipaddress.IPv4Network(f"0.0.0.0/{new_prefix}").netmask.exploded
+
+        # 3. Subnet Increment
+        octets = subnet_mask.split(".")
+        if new_prefix > 24:
+            increment = 256 - int(octets[3])
+            octet_level = "4th"
+        elif new_prefix > 16:
+            increment = 256 - int(octets[2])
+            octet_level = "3rd"
+        elif new_prefix > 8:
+            increment = 256 - int(octets[1])
+            octet_level = "2nd"
+        else:
+            increment = 256 - int(octets[0])
+            octet_level = "1st"
+
+        # 4. Hosts per Subnet
+        host_bits = 32 - new_prefix
+        total_hosts = 2 ** host_bits
+        usable_hosts = total_hosts - 2
+
+        # --------- SUBNETTING CALCULATIONS SECTION ---------
+        st.subheader("📘 Subnetting Calculations")
+
+        st.markdown(f"**1. Original CIDR Prefix:** /{original_prefix}  \n"
+                    f"> The starting network mask provided in the input.")
+
+        st.markdown(f"**2. New Subnet Prefix (CIDR):** /{new_prefix}  \n"
+                    f"> Since we need at least {subnet_count} subnets, we find the smallest power of 2 ≥ {subnet_count}.  \n"
+                    f"> 2^{bits_borrowed} = {2 ** bits_borrowed}, so we borrow {bits_borrowed} bits from the host portion.")
+
+        st.markdown(f"**3. Bits Borrowed:** {bits_borrowed}  \n"
+                    f"> These bits increase the subnet count from 1 to {2 ** bits_borrowed}.")
+
+        st.markdown(f"**4. Subnet Mask:** {subnet_mask}  \n"
+                    f"> Equivalent to /{new_prefix}, giving each subnet its boundary and size.")
+
+        st.markdown(f"**5. Subnet Increment:** {increment} (in the {octet_level} octet)  \n"
+                    f"> This tells us how far apart each subnet’s network address is from the next.")
+
+        st.markdown(f"**6. Usable Hosts per Subnet:** {usable_hosts}  \n"
+                    f"> Each subnet has 2^{host_bits} addresses. Minus network and broadcast, that’s {usable_hosts} usable hosts.")
+
+        # --------- OPTIONAL: Show Subnet Table ---------
+        st.divider()
+        st.subheader("📊 Example: First N Subnets")
+
+        subnets = list(network.subnets(new_prefix=new_prefix))
+        max_available = len(subnets)
+
+        if subnet_count > max_available:
+            st.error(f"Only {max_available} subnets available from {base_network_input}. Try a smaller number.")
         else:
             rows = []
-            for i in range(start_index - 1, start_index - 1 + count):
+            for i in range(min(subnet_count, max_available)):
                 net = subnets[i]
                 hosts = list(net.hosts())
                 rows.append({
@@ -68,14 +89,10 @@ if st.button("Generate Subnet Table"):
                 })
 
             df = pd.DataFrame(rows)
-            st.success(f"Showing subnets {start_index} to {start_index + count - 1}")
             st.dataframe(df)
 
             csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("📥 Download CSV", csv, file_name="subnet_table.csv", mime="text/csv")
-
-            st.subheader("📊 Subnet Host Distribution")
-            st.bar_chart(df["Usable Hosts"])
+            st.download_button("📥 Download Subnet Table as CSV", csv, file_name="subnet_table.csv")
 
     except Exception as e:
         st.error(f"Something went wrong: {e}")
