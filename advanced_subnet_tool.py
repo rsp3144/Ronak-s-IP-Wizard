@@ -11,14 +11,43 @@ subnet_prefix = st.number_input("Enter new subnet prefix (CIDR)", min_value=8, m
 start_index = st.number_input("Start subnet index", min_value=1, value=1)
 count = st.number_input("How many subnets to list?", min_value=1, max_value=2000, value=5)
 
-# On button click
+# 📐 Show calculations before displaying the subnet table
+st.subheader("📘 Subnetting Calculations")
+
+try:
+    original_prefix = int(base_network.split("/")[1])
+    bits_borrowed = subnet_prefix - original_prefix
+    total_hosts = 2 ** (32 - subnet_prefix)
+    usable_hosts = total_hosts - 2
+    mask_ip = ipaddress.IPv4Network(f"0.0.0.0/{subnet_prefix}").netmask.exploded
+
+    # Determine subnet increment
+    octets = mask_ip.split(".")
+    if subnet_prefix > 24:
+        increment = 256 - int(octets[3])
+    elif subnet_prefix > 16:
+        increment = 256 - int(octets[2])
+    elif subnet_prefix > 8:
+        increment = 256 - int(octets[1])
+    else:
+        increment = 256 - int(octets[0])
+
+    # Display calculations
+    st.markdown(f"**Bits Borrowed:** {bits_borrowed}")
+    st.markdown(f"**New Subnet Mask (/CIDR):** /{subnet_prefix} — {mask_ip}")
+    st.markdown(f"**Subnet Increment (per block):** {increment}")
+    st.markdown(f"**Usable Hosts per Subnet:** {usable_hosts}")
+except Exception as e:
+    st.warning(f"Subnetting math skipped: {e}")
+
+# Generate subnets on button click
 if st.button("Generate Subnet Table"):
     try:
-        base = ipaddress.ip_network(base_network)
+        base = ipaddress.ip_network(base_network, strict=False)
         subnets = list(base.subnets(new_prefix=subnet_prefix))
 
         if start_index + count - 1 > len(subnets):
-            st.error(f"Only {len(subnets)} subnets available in this block. Try a lower range.")
+            st.error(f"Only {len(subnets)} subnets available. Adjust your count or starting index.")
         else:
             data = []
             for i in range(start_index - 1, start_index - 1 + count):
@@ -34,14 +63,15 @@ if st.button("Generate Subnet Table"):
                 })
 
             df = pd.DataFrame(data)
+            st.success(f"Showing subnets {start_index} to {start_index + count - 1}")
             st.dataframe(df)
 
-            # Download button
+            # Download option
             csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("Download CSV", csv, "subnets.csv", "text/csv")
+            st.download_button("📥 Download CSV", csv, file_name="subnets.csv", mime="text/csv")
 
-            # Visual
+            # Simple visual
             st.subheader("📊 Subnet Range Overview")
             st.bar_chart(df["Usable Hosts"])
     except Exception as e:
-        st.error(f"Whoops! {e}")
+        st.error(f"Something went wrong: {e}")
