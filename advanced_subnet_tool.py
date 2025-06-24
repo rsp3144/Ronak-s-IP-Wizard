@@ -9,7 +9,7 @@ st.title("📡 Advanced Subnet Calculator")
 base_network = st.text_input("Enter base network (e.g., 101.0.0.0/8)", "101.0.0.0/8")
 subnet_prefix = st.number_input("Enter new subnet prefix (CIDR)", min_value=8, max_value=30, value=19)
 start_index = st.number_input("Start subnet index", min_value=1, value=1)
-count = st.number_input("How many subnets to list?", min_value=1, max_value=100, value=5)
+count = st.number_input("How many subnets to list?", min_value=1, max_value=2000, value=5)
 
 # On button click
 if st.button("Generate Subnet Table"):
